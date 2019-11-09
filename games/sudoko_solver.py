@@ -8,8 +8,6 @@ from random import shuffle, random
 
 import pyxel
 
-from _tools import movement
-
 # -------------------------------------------------------
 # Types
 # -------------------------------------------------------
