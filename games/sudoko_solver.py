@@ -137,6 +137,12 @@ class Board:
             for cell, locked in zip(self._data, self._locked)
         )
 
+    def diff(self, other: Board) -> int:
+        return sum(
+            abs(a - b)
+            for a, b in zip(self, other)
+        )
+
     @property
     def candidates(self) -> Tuple[(Set[int],)*81]:
         M = set(range(1, 10))
@@ -163,10 +169,12 @@ class Board:
 class SolverBf:
     _running: bool = field(init=False, default=False)
     _stack: List = field(init=False, default_factory=list)
+    _iterations: int = field(init=False, default=0)
 
     def start(self, board: Board):
         self._stack = [self._solve(board)]
         self._running = True
+        self._iterations = 0
 
     def stop(self):
         self._running = False
@@ -174,6 +182,10 @@ class SolverBf:
     @property
     def running(self):
         return self._running
+
+    @property
+    def iterations(self):
+        return self._iterations
     
     def update(self) -> Board:
         if not self._stack:
@@ -189,6 +201,8 @@ class SolverBf:
             self._stack.append(self._solve(board, idx))
         else:
             self._stack.pop(-1)
+
+        self._iterations += 1
         return board
 
     @staticmethod
@@ -207,17 +221,13 @@ class SolverBf:
 
 @dataclass
 class SolverDyn:
-    _initial_board: Board = field(init=False, default_factory=Board)
     _running: bool = field(init=False, default=False)
     _stack: List = field(init=False, default_factory=list)
     _memo: List = field(init=False, default_factory=list)
     _iterations: int = field(init=False, default=0)
 
     def start(self, board: Board, reset_after: int = -1):
-        self._initial_board = board
         self._stack = [self._solve(board)]
-        self._reset_after = reset_after
-        self._reset_counter = 0
         self._memo = []
         self._running = True
         self._iterations = 0
@@ -307,11 +317,12 @@ class App:
     _fill: float = field(init=False, default=0.25)
 
     # TODO: change from naive reset to detecting oscillations
-    _reset_after_count: int = field(init=False, default=100)
-    _reset_cell_fraction: float= field(init=False, default=0.2)
+    _reset_compare_width: int = field(init=False, default=5)
+    _reset_diff_limit: int = field(init=False, default=9)
+    _reset_count_limit: int = field(init=False, default=20)
 
+    _reset_compare: List[Board] = field(init=False, default_factory=list)
     _reset_counter: int = field(init=False, default=0)
-    _reset_cells: float = field(init=False, default=0)
 
     def run(self):
         pyxel.init(
@@ -404,18 +415,23 @@ class App:
         )
         col = 5 + 2 * (not self.solver.running)
         pyxel.text(
-            BOARD_WIDTH + 5, 2 * pyxel.FONT_HEIGHT + 8,
+            BOARD_WIDTH + 5, 2 * pyxel.FONT_HEIGHT + 9,
             f"infill:  {self._fill:.0%}",
             col
         )
         pyxel.text(
-            BOARD_WIDTH + 5, 3 * pyxel.FONT_HEIGHT + 10,
-            f"reset:   {self._reset_after_count}",
+            BOARD_WIDTH + 5, 3 * pyxel.FONT_HEIGHT + 14,
+            f"R width: {self._reset_compare_width}",
             col
         )
         pyxel.text(
-            BOARD_WIDTH + 5, 4 * pyxel.FONT_HEIGHT + 12,
-            f"R cells: {self._reset_cell_fraction:.0%}",
+            BOARD_WIDTH + 5, 4 * pyxel.FONT_HEIGHT + 16,
+            f"R limit: {self._reset_diff_limit}",
+            col
+        )
+        pyxel.text(
+            BOARD_WIDTH + 5, 5 * pyxel.FONT_HEIGHT + 18,
+            f"R count: {self._reset_count_limit}",
             col
         )
 
@@ -434,12 +450,15 @@ class App:
                 self.solver.stop()
             else:
                 self.board = board
-                if board.to_fill <= self._reset_cells:
-                    self._reset_counter += 1
-                    if self._reset_counter >= self._reset_after_count:
-                        self.solver.start(self.solver._initial_board)
-                else:
-                    self._reset_counter = 0
+                self._reset_compare.append(board)
+                if self.solver.iterations >= self._reset_compare_width:
+                    diff = self._reset_compare[-self._reset_compare_width].diff(board)
+                    if diff <= self._reset_diff_limit:
+                        self._reset_counter += 1
+                        if self._reset_counter >= self._reset_count_limit:
+                            self.solver.start(self._reset_compare[0])
+                            self._reset_counter = 0
+                            self._reset_compare = [self._reset_compare[0]]
         else:
             movement = (
                 (pyxel.btnp(pyxel.KEY_W) << 0) |
@@ -472,30 +491,37 @@ class App:
 
             if pyxel.btnp(pyxel.KEY_SPACE):
                 self.solver.start(self.board)
-                self._reset_cells = self.board.to_fill * self._reset_cell_fraction
+                self._reset_counter = 0
+                self._reset_compare = [self.board]
 
             if pyxel.btnp(pyxel.KEY_BACKSPACE):
                 for i in range(81):
                     if not self.board.is_locked(i):
                         self.board = self.board.set(i, 0)
 
-            fill_input = pyxel.btnp(pyxel.KEY_KP_4) << 1 | pyxel.btnp(pyxel.KEY_KP_1)
+            fill_input = pyxel.btnp(pyxel.KEY_UP) << 1 | pyxel.btnp(pyxel.KEY_DOWN)
             if fill_input == 0b01:
                 self._fill = max(0, self._fill - 0.05)
             elif fill_input == 0b10:
                 self._fill = min(1, self._fill + 0.05)
 
-            reset_after_input = pyxel.btnp(pyxel.KEY_KP_5) << 1 | pyxel.btnp(pyxel.KEY_KP_2)
-            if reset_after_input == 0b01:
-                self._reset_after_count = max(0, self._reset_after_count - 1)
-            elif reset_after_input == 0b10:
-                self._reset_after_count = self._reset_after_count + 1
+            compare_width_input = pyxel.btnp(pyxel.KEY_KP_4) << 1 | pyxel.btnp(pyxel.KEY_KP_1)
+            if compare_width_input == 0b01:
+                self._reset_compare_width = max(0, self._reset_compare_width - 1)
+            elif compare_width_input == 0b10:
+                self._reset_compare_width = self._reset_compare_width + 1
 
-            reset_after_input = pyxel.btnp(pyxel.KEY_KP_6) << 1 | pyxel.btnp(pyxel.KEY_KP_3)
-            if reset_after_input == 0b01:
-                self._reset_cell_fraction = max(0, self._reset_cell_fraction - 0.05)
-            elif reset_after_input == 0b10:
-                self._reset_cell_fraction = min(1, self._reset_cell_fraction + 0.05)
+            reset_diff_limit = pyxel.btnp(pyxel.KEY_KP_5) << 1 | pyxel.btnp(pyxel.KEY_KP_2)
+            if reset_diff_limit == 0b01:
+                self._reset_diff_limit = max(0, self._reset_diff_limit - 1)
+            elif reset_diff_limit == 0b10:
+                self._reset_diff_limit = self._reset_diff_limit + 1
+
+            reset_count_limit = pyxel.btnp(pyxel.KEY_KP_6) << 1 | pyxel.btnp(pyxel.KEY_KP_3)
+            if reset_count_limit == 0b01:
+                self._reset_count_limit = max(0, self._reset_count_limit - 1)
+            elif reset_count_limit == 0b10:
+                self._reset_count_limit = self._reset_count_limit + 1
 
 if __name__ == '__main__':
     App().run()
