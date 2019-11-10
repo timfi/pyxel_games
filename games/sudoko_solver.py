@@ -83,21 +83,17 @@ class Board:
     def is_locked(self, idx: int):
         return self._locked[idx]
 
-    def lock(self, idx: int) -> Board:
-        locked = list(self._locked)
-        locked[idx] = True
-        return Board(self._data, tuple(locked))
-
-    def unlock(self, idx: int) -> Board:
-        locked = list(self._locked)
-        locked[idx] = False
-        return Board(self._data, tuple(locked))
-
     def freeze(self) -> Board:
-        return Board(self._data, tuple([
+        return Board(self._data, tuple(
             cell != 0
             for cell in self._data
-        ]))
+        ))
+
+    def clear(self) -> Board:
+        return Board(tuple(
+            cell if locked else 0
+            for cell, locked in zip(self._data, self._locked)
+        ), self._locked)
 
     def _iter(self, idx_set: BoardIdxSet) -> Iterator[BoardObj]:
         yield from (cast(BoardObj, tuple(self._data[idx] for idx in idxs)) for idxs in idx_set)
@@ -160,6 +156,8 @@ class Board:
             set()
             for i in range(81)            
         )
+
+
 
 
 # -------------------------------------------------------
@@ -410,9 +408,7 @@ class App:
                 self._iterations = 0
 
             if pyxel.btnp(pyxel.KEY_BACKSPACE):
-                for i in range(81):
-                    if not self.board.is_locked(i):
-                        self.board = self.board.set(i, 0)
+                self.board = self.board.clear()
 
             fill_input = pyxel.btnp(pyxel.KEY_UP) << 1 | pyxel.btnp(pyxel.KEY_DOWN)
             if fill_input == 0b01:

@@ -14,7 +14,7 @@ This is small collection of games written in python using [pyxel](https://github
 ### Controls
 * `WASD` to move the cursor
 * `0, ..., 9` to mark selected cell
-* `space` to start solve
+* `space` to start/stop the solve
 * `UP, DOWN` to set the riddle fill percentage
 * `enter` to generate riddle
 
