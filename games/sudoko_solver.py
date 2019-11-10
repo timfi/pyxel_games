@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Tuple, Iterator, cast, Set
+from typing import List, Tuple, Iterator, cast, Set, Optional
 from itertools import chain
 from collections import defaultdict
-from random import shuffle, random
+from random import random, shuffle
 
 import pyxel
 
@@ -163,74 +163,18 @@ class Board:
 
 
 # -------------------------------------------------------
-# Solvers
+# Solver
 # -------------------------------------------------------
 @dataclass
-class SolverBf:
+class Solver:
     _running: bool = field(init=False, default=False)
     _stack: List = field(init=False, default_factory=list)
-    _iterations: int = field(init=False, default=0)
-
-    def start(self, board: Board):
-        self._stack = [self._solve(board)]
-        self._running = True
-        self._iterations = 0
-
-    def stop(self):
-        self._running = False
-
-    @property
-    def running(self):
-        return self._running
-
-    @property
-    def iterations(self):
-        return self._iterations
-    
-    def update(self) -> Board:
-        if not self._stack:
-            return None
-        try:
-            board, idx = next(self._stack[-1])
-        except StopIteration:
-            self._stack.pop(-1)
-            return self.update()
-        if board.done:
-            self._running = False
-        elif 80 >= idx > 0:
-            self._stack.append(self._solve(board, idx))
-        else:
-            self._stack.pop(-1)
-
-        self._iterations += 1
-        return board
-
-    @staticmethod
-    def _solve(board: Board, idx: int = 0) -> Iterator[Tuple[bool, Board]]:
-        if board.is_locked(idx) or board[idx] != 0:
-            yield board, idx + 1
-        else:
-            candidates = list(range(1, 10))
-            shuffle(candidates)
-            for i in candidates:
-                _board = board.set(idx, i)
-                if _board.valid:
-                    yield _board, idx+1
-            yield board, -1
-
-
-@dataclass
-class SolverDyn:
-    _running: bool = field(init=False, default=False)
-    _stack: List = field(init=False, default_factory=list)
-    _memo: List = field(init=False, default_factory=list)
-    _iterations: int = field(init=False, default=0)
+    _checked_boards: List = field(init=False, default_factory=list)
 
     def start(self, board: Board, reset_after: int = -1):
         self._stack = [self._solve(board)]
-        self._memo = []
+        self._checked_boards = []
         self._running = True
-        self._iterations = 0
 
     def stop(self):
         self._running = False
@@ -238,10 +182,6 @@ class SolverDyn:
     @property
     def running(self):
         return self._running
-
-    @property
-    def iterations(self):
-        return self._iterations
     
     def update(self) -> Board:
         if not self._stack:
@@ -253,37 +193,36 @@ class SolverDyn:
             self._stack.pop(-1)
             return self.update()
 
-        if not board.valid:
-            self._running = False
-            return board
-
         if board.done:
             self._running = False
         elif follow:
             self._stack.append(self._solve(board))
         else:
             self._stack.pop(-1)
-
-        self._iterations += 1
         return board
 
     def _solve(self, board: Board) -> Iterator[Tuple[Board, int]]:
-        groups = defaultdict(list)
-        for idx, candidates in enumerate(board.candidates):
-            if board[idx] == 0:
-                if len(candidates) == 0:
-                    yield False, board
-                else:
-                    groups[len(candidates)].append((idx, candidates))
+        idx = float('inf')
+        candidates = set(range(1, 10))
+        importance = float('-inf')
 
-        for l, group in sorted(groups.items(), key=lambda t: t[0]):
-            shuffle(group)
-            for idx, candidates in group:
-                for candidate in candidates:
-                    _board = board.set(idx, candidate)
-                    if _board not in self._memo:
-                        yield True, _board
-                        self._memo.append(_board)
+        for _idx, _candidates in enumerate(board.candidates):
+            if board[_idx] == 0:
+                if len(_candidates) == 0:
+                    yield False, board
+                elif (
+                    len(_candidates) < len(candidates) and
+                    importance < (_importance := -sum(c == i for c in _candidates for i in board))
+                ):
+                    candidates = _candidates
+                    idx = _idx
+                    importance = _importance
+
+        for candidate in sorted(candidates, key=lambda c: -sum(c == i for i in board)):
+            _board = board.set(idx, candidate)
+            if _board not in self._checked_boards:
+                yield True, _board
+                self._checked_boards.append(_board)
         yield False, board
 
 
@@ -291,11 +230,24 @@ class SolverDyn:
 # Utils
 # -------------------------------------------------------
 def generate_riddle(fill: float = 0.5) -> Board:
-    solver = SolverBf()
+    def _fill(board: Board, idx: int = 0) -> Optional[Board]:
+        if idx >= 80:
+            return board
+        if board.is_locked(idx) or board[idx] != 0:
+            return _fill(board, idx + 1)
+        else:
+            candidates = list(range(1, 10))
+            shuffle(candidates)
+            for i in candidates:
+                _board = board.set(idx, i)
+                if _board.valid:
+                    _new_board = _fill(_board, idx+1)
+                    if _new_board is not None:
+                        return _new_board
+            return None
+
     while True:
-        solver.start(Board())
-        while solver.running:
-            board = solver.update()
+        board = _fill(Board())
         if board is not None:
             for i in range(81):
                 if random() >= fill:
@@ -312,17 +264,10 @@ class App:
     cursor: int = field(init=False, default=0)
     mistake: int = field(init=False, default=0)
     mistake_location: int = field(init=False, default=0)
-    solver: SolverDyn = field(init=False, default_factory=SolverDyn)
+    solver: Solver = field(init=False, default_factory=Solver)
 
     _fill: float = field(init=False, default=0.25)
-
-    # TODO: change from naive reset to detecting oscillations
-    _reset_compare_width: int = field(init=False, default=5)
-    _reset_diff_limit: int = field(init=False, default=9)
-    _reset_count_limit: int = field(init=False, default=20)
-
-    _reset_compare: List[Board] = field(init=False, default_factory=list)
-    _reset_counter: int = field(init=False, default=0)
+    _iterations: int = field(init=False, default=0)
 
     def run(self):
         pyxel.init(
@@ -405,34 +350,13 @@ class App:
     def draw_ui(self):
         pyxel.text(
             BOARD_WIDTH + 5, 2,
-            f"step:    {self.solver.iterations}",
+            f"step:    {self._iterations}",
             5
         )
         pyxel.text(
-            BOARD_WIDTH + 5, pyxel.FONT_HEIGHT + 4,
-            f"R count: {self._reset_counter}",
-            5
-        )
-        col = 5 + 2 * (not self.solver.running)
-        pyxel.text(
-            BOARD_WIDTH + 5, 2 * pyxel.FONT_HEIGHT + 9,
+            BOARD_WIDTH + 5, 1 * pyxel.FONT_HEIGHT + 6,
             f"infill:  {self._fill:.0%}",
-            col
-        )
-        pyxel.text(
-            BOARD_WIDTH + 5, 3 * pyxel.FONT_HEIGHT + 14,
-            f"R width: {self._reset_compare_width}",
-            col
-        )
-        pyxel.text(
-            BOARD_WIDTH + 5, 4 * pyxel.FONT_HEIGHT + 16,
-            f"R limit: {self._reset_diff_limit}",
-            col
-        )
-        pyxel.text(
-            BOARD_WIDTH + 5, 5 * pyxel.FONT_HEIGHT + 18,
-            f"R count: {self._reset_count_limit}",
-            col
+            5 + 2 * (not self.solver.running)
         )
 
     def move_cursor(self, dx: int, dy: int):
@@ -449,16 +373,8 @@ class App:
                     print("Failed to find solution...")
                 self.solver.stop()
             else:
+                self._iterations += 1
                 self.board = board
-                self._reset_compare.append(board)
-                if self.solver.iterations >= self._reset_compare_width:
-                    diff = self._reset_compare[-self._reset_compare_width].diff(board)
-                    if diff <= self._reset_diff_limit:
-                        self._reset_counter += 1
-                        if self._reset_counter >= self._reset_count_limit:
-                            self.solver.start(self._reset_compare[0])
-                            self._reset_counter = 0
-                            self._reset_compare = [self._reset_compare[0]]
         else:
             movement = (
                 (pyxel.btnp(pyxel.KEY_W) << 0) |
@@ -491,8 +407,7 @@ class App:
 
             if pyxel.btnp(pyxel.KEY_SPACE):
                 self.solver.start(self.board)
-                self._reset_counter = 0
-                self._reset_compare = [self.board]
+                self._iterations = 0
 
             if pyxel.btnp(pyxel.KEY_BACKSPACE):
                 for i in range(81):
@@ -504,24 +419,6 @@ class App:
                 self._fill = max(0, self._fill - 0.05)
             elif fill_input == 0b10:
                 self._fill = min(1, self._fill + 0.05)
-
-            compare_width_input = pyxel.btnp(pyxel.KEY_KP_4) << 1 | pyxel.btnp(pyxel.KEY_KP_1)
-            if compare_width_input == 0b01:
-                self._reset_compare_width = max(0, self._reset_compare_width - 1)
-            elif compare_width_input == 0b10:
-                self._reset_compare_width = self._reset_compare_width + 1
-
-            reset_diff_limit = pyxel.btnp(pyxel.KEY_KP_5) << 1 | pyxel.btnp(pyxel.KEY_KP_2)
-            if reset_diff_limit == 0b01:
-                self._reset_diff_limit = max(0, self._reset_diff_limit - 1)
-            elif reset_diff_limit == 0b10:
-                self._reset_diff_limit = self._reset_diff_limit + 1
-
-            reset_count_limit = pyxel.btnp(pyxel.KEY_KP_6) << 1 | pyxel.btnp(pyxel.KEY_KP_3)
-            if reset_count_limit == 0b01:
-                self._reset_count_limit = max(0, self._reset_count_limit - 1)
-            elif reset_count_limit == 0b10:
-                self._reset_count_limit = self._reset_count_limit + 1
 
 if __name__ == '__main__':
     App().run()

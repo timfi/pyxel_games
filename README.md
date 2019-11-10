@@ -17,17 +17,13 @@ This is small collection of games written in python using [pyxel](https://github
 * `space` to start solve
 * `UP, DOWN` to set the riddle fill percentage
 * `enter` to generate riddle
-* `numpad 4, 1` to set `R width`
-* `numpad 5, 2` to set `R limit`
-* `numpad 6, 3` to set `R count`
 
 ### Approach
-The general apporach used in this solver is a brute-force solve using back-tracking enhanced with a bit of domain knowledge such as what can actually go into any given cell at any point in time and that cells with less entry candidates are to be preferred/filled first.
-
-This approach suffers from oscillations from time to time, by which I mean that the the back-tracking can get stuck in branch of the move-tree, and takes a very long time to get back out. The simplest remedy to this is to restart the solve once you decide you've tried around enough. I implemented this idea as follows:
-1. get the total board difference between the n-th and the (n-`R width`)-th iterations
-2. if the difference surpasses a certain threshold (`R limit`) add 1 to the reset counter
-3. once you've detected a certain amount (`R count`) of such reset-conditions, restart the solve
+The general apporach used in this solver is a brute-force solve using back-tracking enhanced with a bit of domain knowledge:
+1. each cell on the board has a set of entry candidates
+2. cells with less entry candidates are preferred
+3. entry candidates that are less common are preferred
+4. cells with the least common entry candidates are preffered
 
 ## Lgame
 ![lgame](.images/lgame.png)
