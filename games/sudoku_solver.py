@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Tuple, Iterator, cast, Set, Optional
+from typing import List, Tuple, Iterator, cast, Set, Optional, NewType
 from itertools import chain
 from collections import defaultdict
 from random import random, shuffle
@@ -11,10 +11,11 @@ import pyxel
 # -------------------------------------------------------
 # Types
 # -------------------------------------------------------
-BoardData = Tuple[(int,)*81]
-BoardLock = Tuple[(bool,)*81]
-BoardObj = Tuple[(int,)*9]
-BoardIdxSet = Tuple[(BoardObj,)*9]
+BoardData = NewType("BoardData", Tuple[int, ...])
+BoardLock = NewType("BoardLock", Tuple[bool, ...])
+BoardObj = NewType("BoardObj", Tuple[int, ...])
+BoardIdxSet = NewType("BoardIdxSet", Tuple[BoardObj, ...])
+CellCandidates = NewType("CellCandidates", Tuple[Set[int], ...])
 
 
 # -------------------------------------------------------
@@ -86,7 +87,7 @@ class Board:
             return self
         data = list(self._data)
         data[idx] = val
-        return Board(tuple(data), self._locked)
+        return Board(cast(BoardData, tuple(data)), self._locked)
 
     def is_locked(self, idx: int):
         """Check if a cell is part of the riddle."""
@@ -94,17 +95,17 @@ class Board:
 
     def freeze(self) -> Board:
         """Make riddle out of all currently filled cells."""
-        return Board(self._data, tuple(
+        return Board(self._data, cast(BoardLock, tuple(
             cell != 0
             for cell in self._data
-        ))
+        )))
 
     def clear(self) -> Board:
         """Get a unfilled copy of the current riddle."""
-        return Board(tuple(
+        return Board(cast(BoardData, tuple(
             cell if locked else 0
             for cell, locked in zip(self._data, self._locked)
-        ), self._locked)
+        )), self._locked)
 
     def _iter(self, idx_set: BoardIdxSet) -> Iterator[BoardObj]:
         """Get all board objects definied by a given board index set."""
@@ -166,7 +167,7 @@ class Board:
         return sum(val == i for i in self._data) / 9
 
     @property
-    def candidates(self) -> Tuple[(Set[int],)*81]:
+    def candidates(self) -> CellCandidates:
         """
         Get the entry candidates for each cell.
         """
@@ -175,20 +176,18 @@ class Board:
         col_idx = lambda idx: idx % 9
         sqr_idx = lambda idx: (idx % 9) // 3 + 3 * (idx // 27)
 
-        cols = list(map(set, self.cols))
-        rows = list(map(set, self.rows))
-        sqrs = list(map(set, self.sqrs))
+        cols = [set(obj) for obj in self.cols]
+        rows = [set(obj) for obj in self.rows]
+        sqrs = [set(obj) for obj in self.sqrs]
 
-        return tuple(
+        return cast(CellCandidates, tuple(
             (
                 M - (cols[col_idx(i)] | rows[row_idx(i)] | sqrs[sqr_idx(i)])
                 if not self.is_locked(i) else
                 set()
             )
             for i in range(81)            
-        )
-
-
+        ))
 
 
 # -------------------------------------------------------
@@ -222,7 +221,7 @@ class Solver:
         """Check if the solver is currently running"""
         return self._running
     
-    def next(self) -> Board:
+    def next(self) -> Optional[Board]:
         """Execute the next step of the solver."""
         if not self._stack:
             return None
@@ -231,7 +230,7 @@ class Solver:
             follow, board = next(self._stack[-1])
         except StopIteration:
             self._stack.pop(-1)
-            return self.update()
+            return self.next()
 
         if board.done:
             self._running = False
@@ -239,9 +238,9 @@ class Solver:
             self._stack.append(self._next(board))
         else:
             self._stack.pop(-1)
-        return board
+        return cast(Board, board)
 
-    def _next(self, board: Board) -> Iterator[Tuple[Board, int]]:
+    def _next(self, board: Board) -> Iterator[Tuple[bool, Board]]:
         """Get prefered child-states for given board."""
         idx, candidates = self._get_preffered_cell(board)
 
@@ -266,7 +265,6 @@ class Solver:
             )
         )
         return idx, all_candidates[idx]
-
 
 
 # -------------------------------------------------------
@@ -322,7 +320,7 @@ class App:
         pyxel.init(
             WINDOW_WIDTH, WINDOW_HEIGHT,
             scale=SCALE, caption="Sudoko Solver",
-            border_width=0
+            border_width=SCALE, border_color=pyxel.DEFAULT_PALETTE[15]
         )
         pyxel.run(self.update, self.draw)
 
@@ -399,7 +397,7 @@ class App:
     def draw_ui(self):
         pyxel.text(
             BOARD_WIDTH + 5, 2,
-            f"iter:    {self._iterations: >5d}",
+            f"iter: {self._iterations: >8d}",
             5
         )
         pyxel.text(

@@ -10,7 +10,7 @@ This is small collection of games written in python using [pyxel](https://github
 * `Q` to forfit the match
 
 ## Sudoku Solver
-![ss](.images/sudoku-solver.png)
+![ss](.images/sudoku-solver.gif)
 ### Controls
 * `WASD` to move the cursor
 * `0, ..., 9` to mark selected cell
