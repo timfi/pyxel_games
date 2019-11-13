@@ -20,7 +20,7 @@ BOARD_WIDTH = 32
 BOARD_HEIGHT = 32
 CELL_SIZE = 6
 CELL_COLOR = 15
-WALL_SIZE = 2
+WALL_SIZE = 1
 WALL_COLOR = 5
 
 # Flags
@@ -32,7 +32,7 @@ VISTED = 1 << 4
 
 # Calculated
 N_CELLS = BOARD_WIDTH * BOARD_HEIGHT
-BLOCK_SIZE = CELL_SIZE + WALL_SIZE
+BLOCK_SIZE = CELL_SIZE + WALL_SIZE * 2
 WINDOW_WIDTH = BOARD_WIDTH * BLOCK_SIZE
 WINDOW_HEIGHT = BOARD_HEIGHT * BLOCK_SIZE
 
@@ -53,10 +53,11 @@ class Generator:
     _maze: List[int] = field(init=False)
 
     def __post_init__(self, start_pos: Optional[Tuple[int, int]]):
-        start_pos = start_pos or (0, 0)
+        x, y = start_pos = start_pos or (0, 0)
         self._stack.append(start_pos)
         self._visited_cells = 1
         self._maze = [0 for _ in range(self.width * self.height)]
+        self._maze[y * self.width + x] |= VISTED
 
     def _get_neighbors(self, x: int, y: int) -> List[int]:
         return [
@@ -70,7 +71,7 @@ class Generator:
         ]    
 
     def step(self) -> Tuple[Maze, Tuple[int, int], bool]:
-        if self._visited_cells <= self.width * self.height:
+        if self._visited_cells < self.width * self.height:
             x, y = self._stack[-1]
             neighbors = self._get_neighbors(x, y)
             if neighbors:
@@ -104,6 +105,7 @@ class App:
             border_width=SCALE, border_color=pyxel.DEFAULT_PALETTE[5],
             fps=100
         )
+        pyxel.mouse(True)
         pyxel.run(self.update, self.draw)
 
     def draw(self):
@@ -118,40 +120,59 @@ class App:
             )
             if cell & VISTED:
                 pyxel.rect(
-                    scr_x, scr_y,
+                    scr_x + WALL_SIZE, scr_y + WALL_SIZE,
                     CELL_SIZE, CELL_SIZE,
                     CELL_COLOR
                 )
-                if cell & RIGHT:
+                if cell & UP:
                     pyxel.rect(
-                        scr_x + CELL_SIZE, scr_y,
+                        scr_x + WALL_SIZE, scr_y,
+                        CELL_SIZE, WALL_SIZE,
+                        CELL_COLOR
+                    )
+                if cell & LEFT:
+                    pyxel.rect(
+                        scr_x, scr_y + WALL_SIZE,
                         WALL_SIZE, CELL_SIZE,
                         CELL_COLOR
                     )
                 if cell & DOWN:
                     pyxel.rect(
-                        scr_x, scr_y + CELL_SIZE,
+                        scr_x + WALL_SIZE, scr_y + WALL_SIZE + CELL_SIZE,
                         CELL_SIZE, WALL_SIZE,
                         CELL_COLOR
                     )
+                if cell & RIGHT:
+                    pyxel.rect(
+                        scr_x + WALL_SIZE + CELL_SIZE, scr_y + WALL_SIZE,
+                        WALL_SIZE, CELL_SIZE,
+                        CELL_COLOR
+                    )
 
-        if self.running:
-            x, y = self.pos
-            pyxel.rectb(x * BLOCK_SIZE, y * BLOCK_SIZE, CELL_SIZE, CELL_SIZE, 8)
+        x, y = self.pos
+        pyxel.rectb(
+            x * BLOCK_SIZE + WALL_SIZE, y * BLOCK_SIZE + WALL_SIZE,
+            CELL_SIZE, CELL_SIZE,
+            2 if self.running else 1
+        )
 
     def update(self):
         if pyxel.btnp(pyxel.KEY_SPACE):
             self.running = not self.running
             if self.running and self.generator is None:
-                self.generator = Generator(BOARD_WIDTH, BOARD_HEIGHT)
+                self.generator = Generator(BOARD_WIDTH, BOARD_HEIGHT, self.pos)
+                pyxel.mouse(False)
         if self.running:
             next_maze, pos, done = self.generator.step()
             if done:
                 self.running = False
                 self.generator = None
-                print("done")
+                pyxel.mouse(True)
             self.maze = next_maze
             self.pos = pos
+        else:
+            scr_x, scr_y = pyxel.mouse_x, pyxel.mouse_y
+            self.pos = scr_x // BLOCK_SIZE, scr_y // BLOCK_SIZE
 
 if __name__ == '__main__':
     App().run()

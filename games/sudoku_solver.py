@@ -21,12 +21,12 @@ CellCandidates = NewType("CellCandidates", Tuple[Set[int], ...])
 # -------------------------------------------------------
 # Constants
 # -------------------------------------------------------
-BLOCK_SIZE = 8
+BLOCK_SIZE = 10
 BOARD_WIDTH = BLOCK_SIZE * 9 + 8
 BOARD_HEIGHT = BLOCK_SIZE * 9 + 8
 WINDOW_WIDTH = BOARD_WIDTH + 64
 WINDOW_HEIGHT = BOARD_HEIGHT
-SCALE = 5
+SCALE = 6
 MISTAKE_TIMER = 7
 
 GEN_EMPTY_BOARD = lambda: cast(BoardData, tuple([0     for _ in range(81)]))
@@ -310,6 +310,7 @@ class App:
     board: Board = field(init=False, default_factory=Board)
     cursor: int = field(init=False, default=0)
     mistake: int = field(init=False, default=0)
+    mouse_enabled: bool = field(init=False, default=True)
     mistake_location: int = field(init=False, default=0)
     solver: Solver = field(init=False, default_factory=Solver)
 
@@ -415,6 +416,11 @@ class App:
             f"infill:  {self._fill: >5.0%}",
             5 + 2 * (not self.solver.running)
         )
+        pyxel.text(
+            WINDOW_WIDTH - 2 - pyxel.FONT_WIDTH * 14, BOARD_HEIGHT - 2 - pyxel.FONT_HEIGHT,
+            "mouse enabled",
+            5 + 2 * (self.mouse_enabled and not self.solver.running)
+        )
 
     def move_cursor(self, dx: int, dy: int):
         x, y = self.cursor % 9, self.cursor // 9
@@ -433,24 +439,36 @@ class App:
                 self._iterations += 1
                 self.board = board
         else:
-            movement = (
-                (pyxel.btnp(pyxel.KEY_W) << 0) |
-                (pyxel.btnp(pyxel.KEY_A) << 1) |
-                (pyxel.btnp(pyxel.KEY_S) << 2) |
-                (pyxel.btnp(pyxel.KEY_D) << 3)
-            )
-            if movement == 0b0001:
-                self.move_cursor(0, -1)
-            elif movement == 0b0010:
-                self.move_cursor(-1, 0)
-            elif movement == 0b0100:
-                self.move_cursor(0, 1)
-            elif movement == 0b1000:
-                self.move_cursor(1, 0)
+            if pyxel.btnp(pyxel.KEY_M):
+                self.mouse_enabled = not self.mouse_enabled
+            
+            if self.mouse_enabled:
+                pyxel.mouse(True)
+                scr_x, scr_y = pyxel.mouse_x, pyxel.mouse_y
+                if 0 <= scr_x < BOARD_WIDTH and 0 <= scr_y < BOARD_HEIGHT:
+                    x, y = scr_x // (BLOCK_SIZE + 1), scr_y // (BLOCK_SIZE + 1)
+                    self.cursor = y * 9 + x
+            else:
+                pyxel.mouse(False)
+                movement = (
+                    (pyxel.btnp(pyxel.KEY_W) << 0) |
+                    (pyxel.btnp(pyxel.KEY_A) << 1) |
+                    (pyxel.btnp(pyxel.KEY_S) << 2) |
+                    (pyxel.btnp(pyxel.KEY_D) << 3)
+                )
+                if movement == 0b0001:
+                    self.move_cursor(0, -1)
+                elif movement == 0b0010:
+                    self.move_cursor(-1, 0)
+                elif movement == 0b0100:
+                    self.move_cursor(0, 1)
+                elif movement == 0b1000:
+                    self.move_cursor(1, 0)
 
-            if not self.board.is_locked(self.cursor):
+            if 0 <= self.cursor < 81 and not self.board.is_locked(self.cursor):
                 inputs = [
-                    pyxel.btnp(getattr(pyxel, f"KEY_{i}"))
+                    pyxel.btnp(getattr(pyxel, f"KEY_{i}")) or
+                    pyxel.btnp(getattr(pyxel, f"KEY_KP_{i}"))
                     for i in range(10)
                 ]
                 if sum(inputs) == 1:
@@ -462,9 +480,10 @@ class App:
             if pyxel.btnp(pyxel.KEY_ENTER):
                 self.board = generate_riddle(self._fill)
 
-            if pyxel.btnp(pyxel.KEY_SPACE):
+            if pyxel.btnp(pyxel.KEY_SPACE) and self.board.valid:
                 self.solver.start(self.board)
                 self._iterations = 0
+                pyxel.mouse(False)
 
             if pyxel.btnp(pyxel.KEY_BACKSPACE):
                 self.board = self.board.clear()
