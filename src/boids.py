@@ -104,7 +104,7 @@ class Boid:
         vec_o1 = round(self.pos + self.vel.orth.norm).as_ituple
         vec_o2 = round(self.pos - self.vel.orth.norm).as_ituple
 
-        pyxel.line(*vec_o1, *vec_o2, 5)
+        pyxel.line(*vec_o1, *vec_o2, [5, 6, 7][pyxel.frame_count // 5 % 3])
 
         vec_l1 = round(self.pos + self.vel.norm * 2).as_ituple
         vec_l2 = round(self.pos - self.vel.norm * 2).as_ituple
