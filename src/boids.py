@@ -19,8 +19,9 @@ VIEW_RADIUS = 20
 
 GENERAL_INFLUENCE = 0.75
 SEPARATION_WEIGHT = 1
-ALIGNMENT_WEIGHT = 1
-COHESION_WEIGHT = 1
+ALIGNMENT_WEIGHT = 0.1
+COHESION_WEIGHT = 0.125
+TARGET_WEIGHT = 0.01
 
 
 @dataclass
@@ -130,10 +131,13 @@ class Boid:
             acc -= sum((neighbor.pos - self.pos for neighbor in neighbors if (neighbor.pos - self.pos).mag < VIEW_RADIUS/2), Vector2D(0, 0)) * SEPARATION_WEIGHT
 
             # 2) Alignment
-            acc += (average([neighbor.pos for neighbor in neighbors]) - self.pos) * ALIGNMENT_WEIGHT / 10
+            acc += (average([neighbor.pos for neighbor in neighbors]) - self.pos) * ALIGNMENT_WEIGHT
 
             # 3) Cohesion
-            acc += (average([neighbor.vel for neighbor in neighbors]) - self.vel) * COHESION_WEIGHT / 8
+            acc += (average([neighbor.vel for neighbor in neighbors]) - self.vel) * COHESION_WEIGHT
+
+        # 4) Target
+        acc += (Vector2D(pyxel.mouse_x, pyxel.mouse_y) - self.pos) * TARGET_WEIGHT * (pyxel.btn(pyxel.MOUSE_LEFT_BUTTON) - pyxel.btn(pyxel.MOUSE_RIGHT_BUTTON))
 
         if acc.mag > 0:
             self.vel += acc.norm * GENERAL_INFLUENCE
