@@ -35,7 +35,7 @@ This little app implements maze generation through simple stack-based backtracki
 * Move mouse and click to generate a maze
 
 ### Appraoch
-This is a simple implementation of so called [voids](http://www.red3d.com/cwr/boids/), which are the brain child of [Craig Reynolds](http://www.red3d.com/cwr/index.html). The general idea behind them is that one can simulate a flocking swarm of entities by applying just 3 simple rules:
+This is a simple implementation of so called [boids](http://www.red3d.com/cwr/boids/), which are the brain child of [Craig Reynolds](http://www.red3d.com/cwr/index.html). The general idea behind them is that one can simulate a flocking swarm of entities by applying just 3 simple rules:
 1. Seperation: steer to avoid crowding local flockmates
 2. Alignment: steer in a similar direction to local flockmates
 3. Cohesion: steer towards the center of the local flock
