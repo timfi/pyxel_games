@@ -2,13 +2,6 @@
 
 This is small collection of games written in python using [pyxel](https://github.com/kitao/pyxel).
 
-## Tic-Tac-Toe
-![ttt](.images/tic-tac-toe.png)
-### Controls
-* `WASD` to move the cursor
-* `space` to mark selected cell
-* `Q` to forfit the match
-
 ## Sudoku Solver
 ![ss](.images/sudoku-solver.gif)
 ### Controls
@@ -19,20 +12,30 @@ This is small collection of games written in python using [pyxel](https://github
 * `enter` to generate riddle
 
 ### Approach
-The general apporach used in this solver is a brute-force solve using back-tracking enhanced with a bit of domain knowledge:
+The general approach used in this solver is a brute-force solve using back-tracking enhanced with a bit of domain knowledge:
 1. each cell on the board has a set of entry candidates
 2. cells with less entry candidates are preferred
 3. entry candidates that are less common are preferred
 4. cells with the least common entry candidates are preffered
 
-## Lgame
-![lgame](.images/lgame.png)
+
+## Maze generation
+![m](.images/mazes.gif)
+
 ### Controls
-* `WASD` to move the cursor
-* `space` to start, end, and terminate the selection
-* `Q` to forfit the match
+* Move mouse and click to generate a maze
 
-### TODO
-* win/loss detection still has some bugs that should be fixed/removed
+### Approach
+This little app implements maze generation through simple stack-based backtracking.
 
+## Boid swarms
+![m](.images/boids.gif)
 
+### Controls
+* Move mouse and click to generate a maze
+
+### Appraoch
+This is a simple implementation of so called [voids](http://www.red3d.com/cwr/boids/), which are the brain child of [Craig Reynolds](http://www.red3d.com/cwr/index.html). The general idea behind them is that one can simulate a flocking swarm of entities by applying just 3 simple rules:
+1. Seperation: steer to avoid crowding local flockmates
+2. Alignment: steer in a similar direction to local flockmates
+3. Cohesion: steer towards the center of the local flock

@@ -157,17 +157,15 @@ class App:
         )
 
     def update(self):
-        if pyxel.btnp(pyxel.KEY_SPACE):
+        if pyxel.btnp(pyxel.KEY_SPACE) or pyxel.btnp(pyxel.MOUSE_LEFT_BUTTON):
             self.running = not self.running
             if self.running and self.generator is None:
                 self.generator = Generator(BOARD_WIDTH, BOARD_HEIGHT, self.pos)
-                pyxel.mouse(False)
         if self.running:
             next_maze, pos, done = self.generator.step()
             if done:
                 self.running = False
                 self.generator = None
-                pyxel.mouse(True)
             self.maze = next_maze
             self.pos = pos
         else:
