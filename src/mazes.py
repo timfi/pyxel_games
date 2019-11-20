@@ -169,8 +169,10 @@ class App:
             self.maze = next_maze
             self.pos = pos
         else:
-            scr_x, scr_y = pyxel.mouse_x, pyxel.mouse_y
-            self.pos = scr_x // BLOCK_SIZE, scr_y // BLOCK_SIZE
+            self.pos = (
+                max(0, min(BOARD_WIDTH-1, pyxel.mouse_x // BLOCK_SIZE)),
+                max(0, min(BOARD_HEIGHT-1, pyxel.mouse_y // BLOCK_SIZE))
+            )
 
 if __name__ == '__main__':
     App().run()

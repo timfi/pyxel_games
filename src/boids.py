@@ -6,22 +6,9 @@ from typing import List, Union, NamedTuple, Tuple
 
 import pyxel
 
+from base_app import BaseApp
+
 Number = Union[int, float]
-
-
-WIDTH = 256
-HEIGHT = 256
-SCALE = 3
-
-N_BOIDS = 100
-BOID_SPEED = 2
-VIEW_RADIUS = 20
-
-GENERAL_INFLUENCE = 0.75
-SEPARATION_WEIGHT = 1
-ALIGNMENT_WEIGHT = 0.1
-COHESION_WEIGHT = 0.125
-TARGET_WEIGHT = 0.01
 
 
 @dataclass
@@ -41,13 +28,13 @@ class Vector2D:
             self.y - other.y,
         )
 
-    def __mul__(self, other: Union[float, int]) -> Vector2D:
+    def __mul__(self, other: Number) -> Vector2D:
         return Vector2D(
             self.x * other,
             self.y * other
         )
 
-    def __truediv__(self, other: Union[float, int]) -> Vector2D:
+    def __truediv__(self, other: Number) -> Vector2D:
         return Vector2D(
             self.x / other,
             self.y / other
@@ -84,68 +71,11 @@ class Vector2D:
     def as_ituple(self) -> Tuple[int, int]:
         return int(self.x), int(self.y)
 
-    def with_mag(self, mag: Number) -> Vector2D:
-        return self.norm * mag
-
 
 @dataclass
 class Boid:
     pos: Vector2D
     vel: Vector2D
-
-    @classmethod
-    def random(cls, width: int, height: int) -> Boid:
-        return Boid(
-            Vector2D(randrange(0, width), randrange(0, height)),
-            Vector2D(random() - 0.5, random() - 0.5).norm
-        )
-
-    def draw(self):
-        vec_o1 = round(self.pos + self.vel.orth.norm).as_ituple
-        vec_o2 = round(self.pos - self.vel.orth.norm).as_ituple
-
-        pyxel.line(*vec_o1, *vec_o2, [5, 6, 7][pyxel.frame_count // 5 % 3])
-
-        vec_l1 = round(self.pos + self.vel.norm * 2).as_ituple
-        vec_l2 = round(self.pos - self.vel.norm * 2).as_ituple
-
-        pyxel.line(*vec_l1, *vec_l2, 6)
-        pyxel.pix(*vec_l1, 9)
-
-
-    def can_see(self, other: Boid) -> bool:
-        return (
-            abs(((self.pos - other.pos)).mag) <= VIEW_RADIUS
-        )
-
-    def update(self, others: List[Boid]):
-        neighbors = [
-            neighbor
-            for j, neighbor in enumerate(others)
-            if self.can_see(neighbor)
-        ]
-
-        acc = Vector2D(0, 0)
-        if neighbors:
-            # 1) Seperation
-            acc -= sum((neighbor.pos - self.pos for neighbor in neighbors if (neighbor.pos - self.pos).mag < VIEW_RADIUS/2), Vector2D(0, 0)) * SEPARATION_WEIGHT
-
-            # 2) Alignment
-            acc += (average([neighbor.pos for neighbor in neighbors]) - self.pos) * ALIGNMENT_WEIGHT
-
-            # 3) Cohesion
-            acc += (average([neighbor.vel for neighbor in neighbors]) - self.vel) * COHESION_WEIGHT
-
-        # 4) Target
-        acc += (Vector2D(pyxel.mouse_x, pyxel.mouse_y) - self.pos) * TARGET_WEIGHT * (pyxel.btn(pyxel.MOUSE_LEFT_BUTTON) - pyxel.btn(pyxel.MOUSE_RIGHT_BUTTON))
-
-        if acc.mag > 0:
-            self.vel += acc.norm * GENERAL_INFLUENCE
-            if self.vel.mag > BOID_SPEED:
-                self.vel = self.vel.norm * BOID_SPEED
-            elif self.vel.mag < BOID_SPEED * 0.5:
-                self.vel = self.vel.norm * 0.5 * BOID_SPEED
-        self.pos = (self.pos + self.vel) % (WIDTH, HEIGHT)
 
 
 def average(l: List[Vector2D]) -> Vector2D:
@@ -153,32 +83,97 @@ def average(l: List[Vector2D]) -> Vector2D:
 
 
 @dataclass
-class App:
+class App(BaseApp):
+    class Config:
+        caption: ClassVar[str]       = "Boids"
+        scale: ClassVar[int]         = 3
+        border_width: ClassVar[int]  = 0
+        border_color: ClassVar[int]  = 0
+
+        n_boids: ClassVar[int]     = 100
+        boid_speed: ClassVar[int]  = 2
+        view_radius: ClassVar[int] = 20
+        acceleration: ClassVar[float]      = 0.75
+        separation_weight: ClassVar[float] = 1.0
+        alignment_weight: ClassVar[float]  = 0.1
+        cohesion_weight: ClassVar[float]   = 0.125
+        target_weight: ClassVar[float]     = 0.01
+
+
     boids: List[Boid] = field(init=False, default_factory=list)
-    _executor: ProcessPoolExecutor = field(init=False)
-    _futures: Dict[Future, int] = field(init=False, default_factory=dict)
 
-    def __post_init__(self):
-        self.boids = [Boid.random(WIDTH, HEIGHT) for _ in range(N_BOIDS)]
-
-    def run(self):
-        pyxel.init(
-            WIDTH, HEIGHT,
-            caption="Boids", scale=SCALE,
-            border_width=0
-        )
+    def init(self, n_boids: int = 100):
         pyxel.mouse(True)
-        pyxel.run(self.update, self.draw)
+        self.boids = [
+            Boid(
+                Vector2D(randrange(0, self.Config.width), randrange(0, self.Config.height)),
+                Vector2D(random() - 0.5, random() - 0.5).norm
+            )
+            for _ in range(self.Config.n_boids)
+        ]
 
     def update(self):
         for boid in self.boids:
-            boid.update(self.boids)
+            neighbors = [
+                neighbor
+                for j, neighbor in enumerate(self.boids)
+                if abs(((boid.pos - neighbor.pos)).mag) <= self.Config.view_radius
+            ]
+
+            acc = Vector2D(0, 0)
+            if neighbors:
+                # 1) Seperation
+                acc -= sum(
+                    (
+                        neighbor.pos - boid.pos
+                        for neighbor in neighbors
+                        if (neighbor.pos - boid.pos).mag < self.Config.view_radius/2
+                    ), Vector2D(0, 0)
+                ) * self.Config.separation_weight
+
+                # 2) Alignment
+                acc += (
+                    (average([neighbor.pos for neighbor in neighbors]) - boid.pos)
+                    * self.Config.alignment_weight
+                )
+
+                # 3) Cohesion
+                acc += (
+                    (average([neighbor.vel for neighbor in neighbors]) - boid.vel)
+                    * self.Config.cohesion_weight
+                )
+
+            # 4) Target
+            acc += (
+                (Vector2D(pyxel.mouse_x, pyxel.mouse_y) - boid.pos)
+                * self.Config.target_weight
+                * (pyxel.btn(pyxel.MOUSE_LEFT_BUTTON) - pyxel.btn(pyxel.MOUSE_RIGHT_BUTTON))
+            )
+
+            if acc.mag > 0:
+                boid.vel += acc.norm * self.Config.acceleration
+                if boid.vel.mag > self.Config.boid_speed:
+                    boid.vel = boid.vel.norm * self.Config.boid_speed
+                elif boid.vel.mag < self.Config.boid_speed * 0.5:
+                    boid.vel = boid.vel.norm * 0.5 * self.Config.boid_speed
+            boid.pos += boid.vel
+            boid.pos %= self.Config.width, self.Config.height
 
     def draw(self):
-        pyxel.cls(0)
+        pyxel.cls(1)
         for boid in self.boids:
-            boid.draw()
+            vec_o1 = round(boid.pos + boid.vel.orth.norm).as_ituple
+            vec_o2 = round(boid.pos - boid.vel.orth.norm).as_ituple
+
+            pyxel.line(*vec_o1, *vec_o2, [5, 6, 7, 6][pyxel.frame_count // 3 % 4])
+
+            vec_l1 = round(boid.pos + boid.vel.norm * 2).as_ituple
+            vec_l2 = round(boid.pos - boid.vel.norm * 2).as_ituple
+
+            pyxel.line(*vec_l1, *vec_l2, 6)
+            pyxel.pix(*vec_l1, 9)
 
 
 if __name__ == "__main__":
-    App().run()
+    app = App()
+    app.run()
